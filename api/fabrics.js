@@ -56,7 +56,28 @@ module.exports = async function handler(req, res) {
     var fabrics = records.map(function (r) {
       var f = r.fields || {};
       var photoField = f["Photo"];
-      var photoUrl = (Array.isArray(photoField) && photoField[0] && photoField[0].url) ? photoField[0].url : null;
+      var photoAtt = (Array.isArray(photoField) && photoField[0]) ? photoField[0] : null;
+      // Prefer Airtable's auto-generated thumbnail over the raw file. This
+      // matters because some photos get uploaded as PDFs (scans/exports)
+      // rather than JPG/PNG - a browser can't display a PDF inside an <img>
+      // tag, but Airtable renders a real image thumbnail for PDFs (and every
+      // other previewable file type) automatically, so using it here makes
+      // photos show up regardless of what file type was uploaded. Falls back
+      // to the original file URL if no thumbnail exists (e.g. an unsupported
+      // file type), and that still works fine for plain image uploads.
+      var photoUrl = null;
+      if (photoAtt) {
+        if (photoAtt.thumbnails && photoAtt.thumbnails.large && photoAtt.thumbnails.large.url) {
+          photoUrl = photoAtt.thumbnails.large.url;
+        } else if (photoAtt.url) {
+          photoUrl = photoAtt.url;
+        }
+      }
+      // The original uploaded file (often the source PDF itself). Used for
+      // a "view full photo" link in the detail view so visitors can open the
+      // real, full-resolution file - the thumbnail above is only ever a
+      // preview render of it.
+      var photoFileUrl = (photoAtt && photoAtt.url) ? photoAtt.url : null;
 
       return {
         id: f["Fabric Code"] || r.id,
@@ -69,7 +90,8 @@ module.exports = async function handler(req, res) {
         colorFastness: grade(f["Color Fastness"]),
         moq: text(f["MOQ"]),
         status: f["Status"] || "In-Stock",
-        photoUrl: photoUrl
+        photoUrl: photoUrl,
+        photoFileUrl: photoFileUrl
       };
     });
 
